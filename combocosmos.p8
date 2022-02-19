@@ -2,7 +2,8 @@ pico-8 cartridge // http://www.pico-8.com
 version 35
 __lua__
 function _init()
-
+	version = 1.01
+	t=0
 	star_timer = 0
 	make_colors()
 	player = make_player()
@@ -12,20 +13,23 @@ function _init()
 	score = 0
 	hi_score = 0
 	for i=0,20 do
-		col = colors_string[ceil(rnd(4))]
-		new_particle(rnd(128),rnd(128),-rnd(0.5) - 0.25,rnd(0.125)-0.0625,rnd(5) + 48,col)
+		local col = colors_string[ceil(rnd(4))]
+		local size = anim_string[ceil(rnd(2))]
+		new_particle(rnd(128),rnd(128),-rnd(0.5) - 0.25,rnd(0.125)-0.0625,rnd(5) + 48,col,nil,size)
 	end
 end
 
 function _update60()
+	t += 1
 	for p in all(particles) do
 		p:update()
 	end
 	star_timer += 1
 	if star_timer > 12 then
 		star_timer = 0
-		col = colors_string[ceil(rnd(4))]
-		new_particle(127,rnd(128),-rnd(0.5) - 0.25,rnd(0.125)-0.0625,rnd(5) + 48,col)
+		local col = colors_string[ceil(rnd(4))]
+		local size = anim_string[ceil(rnd(2))]
+		new_particle(127,rnd(128),-rnd(0.5) - 0.25,rnd(0.125)-0.0625,rnd(5) + 48,col,nil,size)
 	end
 	
 	if intro then
@@ -142,6 +146,19 @@ function draw_intro(x,y)
 
 	nicetext("⬆️⬇️⬅️➡️ to move", 32, 128-24) 
 	nicetext("z to start",44,128-16)
+
+	--drawing the good the bad and the ugly
+	nicetext("bad:",32,128-42)
+	for i=0,6 do
+		spr(i + 16,48 + (i * 9), 128-43)
+	end
+	nicetext("good:",32,128-50)
+	for i=0,1 do
+		spr(i + 34,52 + (i * 9), 128-51)
+	end
+	
+	nicetext(version,2,128-8)
+
 end
 
 function nicetext(text,x,y)
@@ -158,9 +175,14 @@ function make_colors()
 	colors["yellow"] = {10,9}
 	colors["green"] = {11,3}
 	colors["blue"] = {12,1}
+	anim = {}
+	anim_string = {"big","mid","sml"}
+	anim["big"] = {48,49}
+	anim["mid"] = {50,51}
+	anim["sml"] = {52}
 end
 
-function new_particle(x,y,dx,dy,sprite,col,life)
+function new_particle(x,y,dx,dy,sprite,col,life,animation)
 	local particle = {}
 	particle.x = x
 	particle.y = y
@@ -168,23 +190,28 @@ function new_particle(x,y,dx,dy,sprite,col,life)
 	particle.dy = dy
 	particle.sprite = sprite
 	particle.col = col
+	particle.animation = animation
 	if(life == nil) then particle.life = 800 else particle.life = life end
 	particle.draw = function(this)
 		pal(12,colors[this.col][1])
 		pal(1,colors[this.col][2])
-		spr(this.sprite,this.x,this.y)
-		end
+		if this.animation then
+			spr(getframe(anim[this.animation]),this.x,this.y)
+		else
+			spr(this.sprite,this.x,this.y)
+		 end
+	 end
 	particle.update = function(this)
 		this.x += dx
 		this.y += dy
 		if not in_bounds(this.x,this.y) then
 			del(particles,this)
-			end
+		end
 		this.life -= 1
 		if this.life < 0 then
 			del(particles,this)
-			end
 		end
+	end
 	add(particles,particle)
 end
 
@@ -201,6 +228,14 @@ function make_explosion_boost(x,y)
 		local dx = -rnd(1) - 1
 		local dy = rnd(1)-0.5
 		new_particle(x,y,dx,dy,53,"blue",60)
+	end
+end
+
+function make_explosion_shield(x,y)
+	for i=0,4 do
+		local dx = rnd(1) - 1
+		local dy = rnd(1) - 1
+		new_particle(x,y,dx,dy,53,"green",60,"mid")
 	end
 end
 
@@ -243,8 +278,10 @@ function coll(a,b)
 				return false
 	end
 	return true
-	
-	
+end
+
+function getframe(anim)
+	return anim[flr(t/16)%#anim+1]
 end
 -->8
 function make_player()
@@ -257,6 +294,8 @@ function make_player()
 	player.max_speed = 1
 	player.particle_timer = 0
 	player.box = {x1=2,x2=6,y1=2,y2=6}
+	player.shield = false
+	player.shield_anim = {36,37,38,39,40,40,40,40}
 	
 	player.update_sprite = function(this)
 		this.sprite = rnd(6)+1
@@ -319,38 +358,52 @@ function make_player()
 		for m in all(meteors) do
 			if coll(this,m) then
 				del(meteors,m)
-				meteor_speed -= 0.5
-				this:update_sprite()
-				make_explosion(this.x,this.y)
-				score = max(0,score - 50)
-				make_text(this.x,this.y,"-50",8,60)
-				if meteor_speed < 1 then
-					--you lose
-					game_over = true
-					meteors = {}
-					boosts = {}
-					texts = {}
-					this.dy = -4
-					this.dx = rnd(4)-2
-					sfx(2,1)
-					music(5)
-					if score > hi_score then
-						hi_score = score
-					end
+				if this.shield then
+					make_explosion_shield(this.x,this.y)
+					this.shield = false
+					this:update_sprite()
+					this.dx = -meteor_speed * 0.5
+					sfx(16,1)
 				else
-					sfx(0,1)
+					meteor_speed -= 0.5
+					this:update_sprite()
+					make_explosion(this.x,this.y)
+					score = max(0,score - 50)
+					make_text(this.x,this.y,"-50",8,60)
+					if meteor_speed < 1 then
+						--you lose
+						game_over = true
+						meteors = {}
+						boosts = {}
+						texts = {}
+						this.dy = -4
+						this.dx = rnd(4)-2
+						sfx(2,1)
+						music(5)
+						if score > hi_score then
+							hi_score = score
+						end
+					else
+						sfx(0,1)
+					end
 				end
 			end
 		end
 		
 		for b in all(boosts) do
 			if coll(this,b) then
+				if b.type == "boost" then
+					make_explosion_boost(this.x,this.y)
+					meteor_speed += 0.25
+					sfx(1,1)
+				elseif b.type == "shield" then
+					make_explosion_shield(this.x,this.y)
+					this.shield = true
+					sfx(15,1)
+				end
+				score += b.points
+				make_text(this.x,this.y,"+" .. b.points,11,60)
 				del(boosts,b)
-				meteor_speed += 0.25
-				make_explosion_boost(this.x,this.y)
-				sfx(1,1)
-				score += 100
-				make_text(this.x,this.y,"+100",11,60)
 				end
 		end
 		
@@ -366,6 +419,10 @@ function make_player()
 	player.draw = function(this)
 		pal()
 		spr(this.sprite,this.x,this.y)
+		if this.shield then
+			spr(getframe(this.shield_anim),this.x,this.y)
+		end
+		
 		--(this.x,this.y,1,8)
 	end
 	
@@ -405,15 +462,32 @@ function make_boost()
 	boost.x = 128 + 4
 	boost.y = rnd(128-16)
 	boost.box = {x1=0,x2=8,y1=0,y2=8}
+	
+	
+	if rnd() > 0.5 then
+		boost.type = "boost"
+		boost.sprite = 34
+		boost.points = 100
+		boost.color = "blue"
+	else
+		boost.type = "shield"
+		boost.sprite = 35
+		boost.points = 50
+		boost.color = "green"
+	end
+	
 	boost.update = function(this)
 		this.x -= meteor_speed
 		if this.x < 0 then
 			del(boosts,this)
 		end
+		if t % 8 == 0 then
+			new_particle(this.x,this.y,rnd(0.25)-0.125,rnd(0.25)-0.125,50,this.color,120,"mid")
+		end
 	end
 	boost.draw = function(this)
 		pal()
-		spr(34,this.x,this.y)
+		spr(this.sprite,this.x,this.y)
 	end
 	
 	add(boosts,boost)
@@ -461,14 +535,14 @@ __gfx__
 666d6dd6e576e212aaa9999900066d60ddd5d55505d555d000424900000000000000000000000000000000000000000000000000000000000000000000000000
 66d6dd66eeeee222aaa919910000d6000d5d5550005d5d0000094000000000000000000000000000000000000000000000000000000000000000000000000000
 066d66600e200e200100100100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0000000000000000c00c00c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-02202200022022001c01c01c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-28828820255255201c01c01c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-28888820255555201c01c01c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-02888200025552001c01c01c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-0028200000252000c00c00c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00020000000200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000000000000000000000000000000000077bb000077bb000077bb000077bb000077bb0000000000000000000000000000000000000000000000000000000000
+0000000000000000c00c00c00b0000b007b00030070b00300700b03007000b300700003000000000000000000000000000000000000000000000000000000000
+02202200022022001c01c01cb33bb33b7b700003707b00037070bb03707000b37070000300000000000000000000000000000000000000000000000000000000
+28828820255255201c01c01cb3b33b3bbbb00003b0bb0003b0b0bb03b0b000b3b0b0000300000000000000000000000000000000000000000000000000000000
+28888820255555201c01c01cb3b33b3bbb000003b0bb0003b000bb03b00000b3b000000300000000000000000000000000000000000000000000000000000000
+02888200025552001c01c01cb33bb33b3300000b30bb000b3000bb0b300000bb3000000b00000000000000000000000000000000000000000000000000000000
+0028200000252000c00c00c00b0000b0033000b0030b00b00300b0b003000bb0030000b000000000000000000000000000000000000000000000000000000000
+0002000000020000000000000000000000333b0000333b0000333b0000333b0000333b0000000000000000000000000000000000000000000000000000000000
 00010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0001000001000100000000000000000000000000000c000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 000c000000c0c00000c0c000000c00000000000000c0c00000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -624,11 +698,13 @@ d11000001e0501c000180501e0001c0001a000180501d0001d0501b00017050170501b0501900017
 012000000c043026000c04330600246150c043006000c0430c043026000c043006002461502600006000c0430c043026000c04300600246150c043006000c0430c043026000c043006002461500600006000c043
 012000000405004000040500400004050040000405004000020500000002050000000205002000020500200000050000000005000000000500000000050000000205000000020500000002050000000205000000
 000200000d3201133015330193301c3301f330193200f31014310193201d33024340293402c34031350323501c3001f3002230024300293002c3002f300323002430020300263002c30031300363003a3003d300
+0002000013250130501325014250160501625017250192501e0501e2502305027250292502905025250260502125024050230501e240200301f0301e030162201b0201a0101221018010180000d2001600016000
+0110000000130306553063530615306003060036305353053430533305313052f3052030518305123050d3050a3050d3050e305193051a3051b3051e30520305233052630527305300052d0052b0052a00500000
 __music__
 00 07434544
 01 07034544
 02 0b034644
-00 4b434944
+00 50424344
 03 07084844
 03 0c0d4344
 
