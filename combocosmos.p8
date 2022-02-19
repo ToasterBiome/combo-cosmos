@@ -140,7 +140,7 @@ function draw_intro(x,y)
 	end
 	nicetext("prismapunch games",9,18)
 
-	nicetext("wasd to move", 40, 128-24) 
+	nicetext("⬆️⬇️⬅️➡️ to move", 32, 128-24) 
 	nicetext("z to start",44,128-16)
 end
 
