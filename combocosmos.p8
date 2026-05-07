@@ -282,9 +282,9 @@ function make_lightning_strike(x,y)
 	end
 	for b in all(boosts) do
 		score += 100
-		make_text(m.x,m.y,"+" .. 100,11,60)
+		make_text(b.x,b.y,"+" .. 100,11,60)
 		del(boosts, b)
-		new_particle(m.x,m.y, 0, 0,58,"red",32,"lig")
+		new_particle(b.x,b.y, 0, 0,58,"red",32,"lig")
 	end
 end
 
